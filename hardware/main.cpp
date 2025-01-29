@@ -422,4 +422,3 @@ void lstm_top(
     dense_layer(output_h2, dense_output);
 }
 
-
