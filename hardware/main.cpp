@@ -344,7 +344,7 @@ void lstm2_sequence(
 void softmax(float input[DENSE_UNITS], float output[DENSE_UNITS]) {
     #pragma HLS INLINE off
 
-    // Find maximum value for numerical stability
+
     float max_val = input[0];
     FIND_MAX:
     for (int i = 1; i < DENSE_UNITS; i++) {
@@ -365,7 +365,6 @@ void softmax(float input[DENSE_UNITS], float output[DENSE_UNITS]) {
         exp_sum += exp_values[i];
     }
 
-    // Normalize to get probabilities
     NORMALIZE:
     for (int i = 0; i < DENSE_UNITS; i++) {
         #pragma HLS PIPELINE
@@ -373,52 +372,107 @@ void softmax(float input[DENSE_UNITS], float output[DENSE_UNITS]) {
     }
 }
 
-// Dense layer function
+
 void dense_layer(
     float input[LSTM2_UNITS],
     float output[DENSE_UNITS]
 ) {
     #pragma HLS INLINE off
+    #pragma HLS ARRAY_PARTITION variable=input cyclic factor=8
+    #pragma HLS ARRAY_PARTITION variable=dense_weights cyclic factor=8 dim=1
+    #pragma HLS ARRAY_PARTITION variable=dense_bias complete
 
-    // Temporary array for dense output before softmax
+
     float dense_temp[DENSE_UNITS];
+    #pragma HLS ARRAY_PARTITION variable=dense_temp complete
+
 
     DENSE_LOOP:
     for (int i = 0; i < DENSE_UNITS; i++) {
-        #pragma HLS PIPELINE
-        float sum = dense_bias[i];  // Initialize with bias
-        for (int j = 0; j < LSTM2_UNITS; j++) {
-            sum += input[j] * dense_weights[j][i];  // Matrix multiplication
+        #pragma HLS PIPELINE II=1
+        #pragma HLS UNROLL factor=4
+
+        float acc = 0;
+        float bias = dense_bias[i];
+
+
+        float partial_sums[8] = {0};
+        #pragma HLS ARRAY_PARTITION variable=partial_sums complete
+
+
+        MATRIX_MULT:
+        for (int j = 0; j < LSTM2_UNITS; j += 8) {
+            #pragma HLS PIPELINE II=1
+
+
+            float weights_cache[8];
+            float inputs_cache[8];
+            #pragma HLS ARRAY_PARTITION variable=weights_cache complete
+            #pragma HLS ARRAY_PARTITION variable=inputs_cache complete
+
+            CACHE_LOAD:
+            for (int k = 0; k < 8; k++) {
+                #pragma HLS UNROLL
+                if (j + k < LSTM2_UNITS) {
+                    weights_cache[k] = dense_weights[j + k][i];
+                    inputs_cache[k] = input[j + k];
+                }
+            }
+
+            // Compute partial products
+            PARTIAL_PRODUCTS:
+            for (int k = 0; k < 8; k++) {
+                #pragma HLS UNROLL
+                if (j + k < LSTM2_UNITS) {
+                    partial_sums[k] += inputs_cache[k] * weights_cache[k];
+                }
+            }
         }
-        dense_temp[i] = sum;  // Store the intermediate result
+
+        // Sum all partial results
+        PARTIAL_SUM:
+        for (int k = 0; k < 8; k++) {
+            #pragma HLS UNROLL
+            acc += partial_sums[k];
+        }
+
+        dense_temp[i] = acc + bias;
     }
 
 
     softmax(dense_temp, output);
 }
+
 void lstm_top(
     float input_data[49 * INPUT_SIZE],
-    float output_h1[LSTM1_UNITS],
-    float output_c1[LSTM1_UNITS],
-    float output_h2[LSTM2_UNITS],
-    float output_c2[LSTM2_UNITS],
     float dense_output[DENSE_UNITS]
 ) {
     #pragma HLS INTERFACE m_axi port=input_data depth=1960 offset=slave bundle=gmem0
-    #pragma HLS INTERFACE m_axi port=output_h1 depth=64 offset=slave bundle=gmem1
-    #pragma HLS INTERFACE m_axi port=output_c1 depth=64 offset=slave bundle=gmem1
-    #pragma HLS INTERFACE m_axi port=output_h2 depth=64 offset=slave bundle=gmem2
-    #pragma HLS INTERFACE m_axi port=output_c2 depth=64 offset=slave bundle=gmem2
-    #pragma HLS INTERFACE m_axi port=dense_output depth=4 offset=slave bundle=gmem3
+    #pragma HLS INTERFACE m_axi port=dense_output depth=4 offset=slave bundle=gmem1
     #pragma HLS INTERFACE s_axilite port=return
+
+
+    #pragma HLS DATAFLOW
+
+
+    float h1_state[LSTM1_UNITS];
+    float c1_state[LSTM1_UNITS];
+    float h2_state[LSTM2_UNITS];
+    float c2_state[LSTM2_UNITS];
+
 
     float h_states[49][LSTM1_UNITS];
 
-    kws_sequence(input_data, output_h1, output_c1, h_states);
+    #pragma HLS ARRAY_PARTITION variable=h_states cyclic factor=8 dim=2
+    #pragma HLS ARRAY_PARTITION variable=h1_state cyclic factor=8
+    #pragma HLS ARRAY_PARTITION variable=c1_state cyclic factor=8
+    #pragma HLS ARRAY_PARTITION variable=h2_state cyclic factor=8
+    #pragma HLS ARRAY_PARTITION variable=c2_state cyclic factor=8
 
-    lstm2_sequence(h_states, output_h2, output_c2);
 
-
-    dense_layer(output_h2, dense_output);
+    kws_sequence(input_data, h1_state, c1_state, h_states);
+    lstm2_sequence(h_states, h2_state, c2_state);
+    dense_layer(h2_state, dense_output);
 }
+
 
