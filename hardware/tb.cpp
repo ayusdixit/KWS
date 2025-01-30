@@ -131,93 +131,29 @@
 
 #define LSTM2_UNITS 64
 
-
 void lstm_top(
     float input_sequence[49 * INPUT_SIZE],
-    float h_final1[LSTM1_UNITS],
-    float c_final1[LSTM1_UNITS],
-    float h_final2[LSTM2_UNITS],
-    float c_final2[LSTM2_UNITS],
     float dense_output[DENSE_UNITS]
 );
 
 int main() {
 
-    float h_final1[LSTM1_UNITS];  // Final hidden state output for LSTM1
-    float c_final1[LSTM1_UNITS];  // Final cell state output for LSTM1
-    float h_final2[LSTM2_UNITS];  // Final hidden state output for LSTM2
-    float c_final2[LSTM2_UNITS];  // Final cell state output for LSTM2
-    float dense_output[DENSE_UNITS];  // Final dense layer output
+    float dense_output[DENSE_UNITS];
 
-
-    for (int i = 0; i < LSTM1_UNITS; i++) {
-        h_final1[i] = 0.0f;
-        c_final1[i] = 0.0f;
-    }
-
-    for (int i = 0; i < LSTM2_UNITS; i++) {
-        h_final2[i] = 0.0f;
-        c_final2[i] = 0.0f;
-    }
 
     for (int i = 0; i < DENSE_UNITS; i++) {
         dense_output[i] = 0.0f;
     }
 
 
-    lstm_top(input, h_final1, c_final1, h_final2, c_final2, dense_output);
-
-
-    printf("\n=== LSTM1 Final Hidden State ===\n");
-    for (int i = 0; i < LSTM1_UNITS; i++) {
-        printf("h_final1[%d] = %f\n", i, h_final1[i]);
-    }
-
-    printf("\n=== LSTM1 Final Cell State ===\n");
-    for (int i = 0; i < LSTM1_UNITS; i++) {
-        printf("c_final1[%d] = %f\n", i, c_final1[i]);
-    }
-
-    // Print final outputs for LSTM2
-    printf("\n=== LSTM2 Final Hidden State ===\n");
-    for (int i = 0; i < LSTM2_UNITS; i++) {
-        printf("h_final2[%d] = %f\n", i, h_final2[i]);
-    }
-
-    printf("\n=== LSTM2 Final Cell State ===\n");
-    for (int i = 0; i < LSTM2_UNITS; i++) {
-        printf("c_final2[%d] = %f\n", i, c_final2[i]);
-    }
-
+    lstm_top(input, dense_output);
 
     printf("\n=== Dense Layer Output ===\n");
     for (int i = 0; i < DENSE_UNITS; i++) {
         printf("dense_output[%d] = %f\n", i, dense_output[i]);
     }
 
-
     printf("\n=== Statistical Analysis ===\n");
-
-
-    float max_h1 = -FLT_MAX, min_h1 = FLT_MAX, sum_h1 = 0.0f;
-    for (int i = 0; i < LSTM1_UNITS; i++) {
-        max_h1 = fmaxf(max_h1, h_final1[i]);
-        min_h1 = fminf(min_h1, h_final1[i]);
-        sum_h1 += h_final1[i];
-    }
-    printf("LSTM1 Hidden State Stats:\n");
-    printf("  Max: %f\n  Min: %f\n  Average: %f\n",
-           max_h1, min_h1, sum_h1/LSTM1_UNITS);
-
-    float max_h2 = -FLT_MAX, min_h2 = FLT_MAX, sum_h2 = 0.0f;
-    for (int i = 0; i < LSTM2_UNITS; i++) {
-        max_h2 = fmaxf(max_h2, h_final2[i]);
-        min_h2 = fminf(min_h2, h_final2[i]);
-        sum_h2 += h_final2[i];
-    }
-    printf("\nLSTM2 Hidden State Stats:\n");
-    printf("  Max: %f\n  Min: %f\n  Average: %f\n",
-           max_h2, min_h2, sum_h2/LSTM2_UNITS);
 
 
     float max_dense = -FLT_MAX, min_dense = FLT_MAX, sum_dense = 0.0f;
@@ -226,6 +162,7 @@ int main() {
         min_dense = fminf(min_dense, dense_output[i]);
         sum_dense += dense_output[i];
     }
+
     printf("\nDense Layer Output Stats:\n");
     printf("  Max: %f\n  Min: %f\n  Average: %f\n",
            max_dense, min_dense, sum_dense/DENSE_UNITS);
@@ -239,7 +176,8 @@ int main() {
             max_class = i;
         }
     }
-    printf("\nPredicted Class: %d (Probability: %f)\n", max_class, max_prob);
 
+    printf("\nPredicted Class: %d (Probability: %f)\n", max_class, max_prob);
     return 0;
 }
+
